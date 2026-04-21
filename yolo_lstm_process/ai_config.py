@@ -1,16 +1,15 @@
-    # config.py
 import os
+from pathlib import Path
 import torch
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
 
+YOLO_MODEL_PATH = PROJECT_ROOT / "weights" / "best.pt"
+LSTM_MODEL_PATH = PROJECT_ROOT / "weights" / "best_lstmnew.pth"
 
-YOLO_MODEL_PATH = os.path.join(BASE_DIR, "..", "weights", "best.pt")
-LSTM_MODEL_PATH = os.path.join(BASE_DIR, "..", "weights", "best_lstmnew.pth")
-
-VIDEO_PATH = os.path.join(BASE_DIR, "..", "..", "media", "test_inputs", "test_2.mp4")
-OUTPUT_PATH = os.path.join(BASE_DIR, "..", "..", "media", "test_outputs")
-
+VIDEO_PATH = PROJECT_ROOT / "media" / "test_inputs" / "test_2.mp4"
+OUTPUT_PATH = PROJECT_ROOT / "media" / "test_outputs"
 
 CONF_THRES = 0.7
 IMGSZ = 640
@@ -21,4 +20,3 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 YOLO_CLASS_NAMES = ["violence", "Weapon"]
 YOLO_CLASS_TO_IDX = {name: i for i, name in enumerate(YOLO_CLASS_NAMES)}
-
