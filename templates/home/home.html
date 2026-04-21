@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="vi">
+{% load static %}
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YOLO + LSTM Prediction</title>
+  <style>
+    :root {
+      --primary: #0b3d91;
+      --primary-dark: #07285f;
+      --accent: #f0b400;
+      --bg: #eef3f9;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #dbe4f0;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 10px 30px rgba(11, 61, 145, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #edf3ff 0%, #f8fbff 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .video-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .overlay-content {
+      position: relative;
+      width: 90%;
+      height: 90%;
+    }
+
+    .overlay-content img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
+    }
+    .video-link-btn {
+      display: inline-block;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: #0b3d91;
+      color: white;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .video-link-btn:hover {
+      background: #1248aa;
+    }
+    .clickable-img {
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .clickable-img:hover {
+      transform: scale(1.05);
+    }
+    #closeOverlay {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      background: red;
+      color: white;
+      border: none;
+      font-size: 20px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+      padding: 28px 24px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      box-shadow: 8px 0 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .brand {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      text-align: center;
+      font-weight: 700;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .school h1 {
+      font-size: 20px;
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+
+    .school p {
+      color: rgba(255,255,255,0.8);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .team-box,
+    .info-box {
+      background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 18px;
+      backdrop-filter: blur(8px);
+    }
+
+    .team-box h2,
+    .info-box h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #fff4c7;
+    }
+
+    .team-list {
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .team-list li {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.08);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .main {
+      padding: 28px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 26px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .hero h2 {
+      font-size: 32px;
+      color: var(--primary-dark);
+      margin-bottom: 10px;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 900px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 22px;
+    }
+
+    .card {
+      grid-column: span 12;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      font-size: 22px;
+      color: var(--primary-dark);
+      margin-bottom: 8px;
+    }
+
+    .card p.desc {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 18px;
+      line-height: 1.6;
+    }
+
+    .upload-card,
+    .camera-card {
+      grid-column: span 6;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    button,
+    .file-label {
+      border: none;
+      background: var(--primary);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+
+    button:hover,
+    .file-label:hover {
+      transform: translateY(-1px);
+      background: #1248aa;
+    }
+
+    button.secondary {
+      background: #e8eef9;
+      color: var(--primary-dark);
+      border: 1px solid #cfdcf3;
+    }
+
+    button.secondary:hover {
+      background: #dde8fb;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .media-frame {
+      width: 100%;
+      min-height: 300px;
+      border-radius: 18px;
+      border: 2px dashed #cad8ee;
+      background: #f8fbff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .media-frame video,
+    .media-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .placeholder {
+      text-align: center;
+      color: var(--muted);
+      padding: 24px;
+      line-height: 1.7;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%); /* 👈 căn giữa tuyệt đối */
+
+      color: var(--muted);
+      font-size: 16px;
+      text-align: center;
+      pointer-events: none; /* 👈 tránh bị click đè */
+    }
+
+    .status-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(11, 61, 145, 0.92);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      z-index: 2;
+    }
+
+    .history-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .search-box {
+      min-width: 260px;
+      flex: 1;
+      max-width: 380px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #d3deef;
+      outline: none;
+      font-size: 14px;
+      background: #fbfdff;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+      background: white;
+    }
+
+    th,
+    td {
+      padding: 14px 12px;
+      border-bottom: 1px solid #edf2fa;
+      text-align: left;
+      font-size: 14px;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f5f9ff;
+      color: var(--primary-dark);
+      font-weight: 700;
+    }
+
+    tr:hover td {
+      background: #fbfdff;
+    }
+
+    .label-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .violence {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .weapon {
+      background: #ffedd5;
+      color: #c2410c;
+    }
+
+    .normal {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .thumb {
+      width: 88px;
+      height: 58px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 1px solid #dbe4f0;
+      background: #f3f7ff;
+    }
+
+    .small-video {
+      width: 120px;
+      height: 68px;
+      border-radius: 10px;
+      border: 1px solid #dbe4f0;
+      background: #f8fbff;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .floating-delete-btn:hover {
+      background: #c62828;
+      transform: scale(1.05);
+    }
+
+    .history-table-box {
+      position: relative;
+      padding-bottom: 60px;
+    }
+
+    .clear-btn-inside {
+      position: absolute;
+      right: 16px;
+      bottom: 12px;
+      display: inline-block;
+      padding: 10px 16px;
+      background: #e53935;
+      color: white;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: 0.2s;
+      z-index: 5;
+    }
+
+    .clear-btn-inside:hover {
+      background: #c62828;
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+      }
+
+      .upload-card,
+      .camera-card {
+        grid-column: span 12;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .main {
+        padding: 16px;
+      }
+
+      .sidebar {
+        padding: 18px;
+      }
+
+      .hero h2 {
+        font-size: 26px;
+      }
+
+      .brand {
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+        <img src="{% static 'images/logo.png' %}">
+        </div>
+        <div class="school">
+          <h1>TRƯỜNG ĐẠI HỌC GIAO THÔNG VẬN TẢI
+               PHÂN HIỆU TẠI TP HỒ CHÍ MINH</h1>
+        </div>
+      </div>
+
+      <div class="team-box">
+        <h2>Nhóm sinh viên thực hiện:</h2>
+        <ul class="team-list">
+          <li>1. Phạm Văn Quí MSSV: 6451020052</li>
+          <li>2. Trần Phan Phú Giang MSSV: 6451020007</li>
+          <li>3. Nguyễn Văn Vinh MSSV: 6451020074</li>
+          <li>4. Nguyễn Hữu Tài MSSV: 6451020053</li>
+        </ul>
+      </div>
+
+      <div class="info-box">
+        <h2>Thông tin hệ thống</h2>
+        <p style="line-height:1.7; color: rgba(255,255,255,0.88); font-size:14px;">
+          Giao diện gồm các chức năng chính:
+          tải video, chạy realtime bằng camera laptop, và lưu lịch sử sự kiện với nhãn, độ tin cậy, thời gian, ảnh và video liên quan.
+        </p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <h2>Hệ thống phát hiện hành vi nguy hiểm bằng YOLO + LSTM phục vụ giám sát an toàn.</h2>
+      </section>
+
+      <section class="grid">
+        <!-- Upload video -->
+        <div class="card upload-card">
+          <h3>Tải video để chạy thử mô hình</h3>
+          <p class="desc">
+            Chọn video từ máy tính, gửi lên hệ thống và xem kết quả suy luận theo thời gian thực.
+          </p>
+
+          <form id="uploadForm" method="POST" action="{% url 'upload' %}" enctype="multipart/form-data">            {% csrf_token %}
+            <div class="controls">
+              <label class="file-label" for="videoUpload">Chọn video</label>
+              <button type="submit">Upload & Run</button>
+              <button type="button" class="secondary" id="clearUpload">Xóa video</button>
+            </div>
+
+            <input type="file" id="videoUpload" name="video" accept="video/*" required />
+          </form>
+
+          <div class="media-frame" id="uploadFrame">
+            {% if output_video %}
+              <video controls>
+                <source src="{{ output_video }}" type="video/mp4">
+                Trình duyệt không hỗ trợ phát video.
+              </video>
+
+            {% elif input_video and not start_stream %}
+              <video controls>
+                <source src="{{ input_video }}" type="video/mp4">
+              </video>
+
+            {% elif start_stream and stream_name %}
+              <img
+                src="{% url 'stream_video' stream_name %}"
+                alt="Streaming result"
+                class="stream-output"
+              />
+
+            {% else %}
+              <div class="status-badge">UPLOAD VIDEO</div>
+              <div class="placeholder">Chưa có video nào được chọn</div>
+            {% endif %}
+          </div>
+
+          {% if label %}
+            <div class="result-box">
+              <p><strong>Nhãn dự đoán:</strong> {{ label }}</p>
+              <p><strong>Độ tin cậy:</strong> {{ conf }}</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Camera -->
+        <div class="card camera-card">
+          <h3>Chạy trực tiếp trên máy của bạn</h3>
+          <p class="desc">
+            Mở camera trực tiếp trong trình duyệt để phục vụ kiểm tra và giám sát thời gian thực.
+          </p>
+
+          <div class="controls">
+            <button id="startCamera">Mở camera</button>
+            <button class="secondary" id="stopCamera">Tắt camera</button>
+          </div>
+
+          <div class="media-frame" id="cameraFrame">
+            <video id="cameraVideo" autoplay playsinline muted></video>
+            <div class="placeholder" id="cameraPlaceholder">Camera chưa được bật</div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="card history-card">
+          <div class="history-top">
+            <div>
+              <h3>Lịch sử các sự việc đã xảy ra</h3>
+              <p class="desc history-desc">
+                Thông tin gồm hành động , độ chính xác , ngày giờ xảy ra, ảnh và video lúc xảy ra sự việc.
+              </p>
+            </div>
+          </div>
+
+          <div class="history-table-box">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>Hành động</th>
+                    <th>Độ chính xác</th>
+                    <th>Ngày giờ xảy ra</th>
+                    <th>Ảnh</th>
+                    <th>Video</th>
+                  </tr>
+                </thead>
+                <tbody id="historyBody">
+                  {% for event in events %}
+                    <tr>
+                      <td>{{ forloop.counter }}</td>
+                      <td>
+                        {% if event.event_type == 'violence' %}
+                          <span class="label-chip violence">Violence</span>
+                        {% elif event.event_type == 'weapon' %}
+                          <span class="label-chip weapon">Weapon</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ event.confidence|floatformat:2 }}</td>
+                      <td>{{ event.timestamp|date:"d/m/Y H:i:s" }}</td>
+                      <td>
+                        {% if event.image %}
+                          <img 
+                            class="thumb clickable-img" 
+                            src="{{ event.image.url }}" 
+                            alt="Ảnh sự kiện"
+                            onclick="openImageOverlay(this.src)"
+                          >
+                        {% else %}
+                          Không có ảnh
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if event.clip %}
+                          <a href="{{ event.clip.url }}" target="_blank" class="video-link-btn">
+                            Xem video
+                          </a>
+                        {% else %}
+                          Không có video
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="6" style="text-align:center;">Chưa có dữ liệu sự kiện</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <a href="{% url 'clear_events' %}"
+              onclick="return confirm('Xóa toàn bộ lịch sử?')"
+              class="clear-btn-inside">
+              🗑 Xóa
+            </a>
+          </div>
+
+          <div id="videoOverlay" class="video-overlay">
+            <div class="overlay-content">
+              <button id="closeOverlay">✕</button>
+              <img id="overlayStream" src="" />
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const videoUpload = document.getElementById('videoUpload');
+    const uploadFrame = document.getElementById('uploadFrame');
+    const clearUpload = document.getElementById('clearUpload');
+    const overlay = document.getElementById("videoOverlay");
+    const overlayStream = document.getElementById("overlayStream");
+    const closeOverlay = document.getElementById("closeOverlay");
+    const uploadForm = document.getElementById("uploadForm");
+
+    if (uploadForm) {
+      uploadForm.addEventListener("submit", function () {
+        uploadFrame.innerHTML = `
+          <div class="status-badge">PROCESSING</div>
+          <div class="placeholder">Đang tải video...</div>
+        `;
+      });
+    }
+    async function loadEvents() {
+        try {
+          const response = await fetch("{% url 'events_api' %}");
+          const data = await response.json();
+
+          const historyBody = document.getElementById("historyBody");
+          if (!historyBody) return;
+
+          if (!data.events || data.events.length === 0) {
+            historyBody.innerHTML = `
+              <tr>
+                <td colspan="6" style="text-align:center;">Chưa có dữ liệu sự kiện</td>
+              </tr>
+            `;
+            return;
+          }
+
+          historyBody.innerHTML = data.events.map(event => {
+            let labelHtml = "";
+            if (event.event_type === "violence") {
+              labelHtml = `<span class="label-chip violence">Violence</span>`;
+            } else if (event.event_type === "weapon") {
+              labelHtml = `<span class="label-chip weapon">Weapon</span>`;
+            }
+
+            const imageHtml = event.image_url
+              ? `<img class="thumb clickable-img" src="${event.image_url}" alt="Ảnh sự kiện" onclick="openImageOverlay(this.src)">`
+              : `Không có ảnh`;
+
+            const clipHtml = event.clip_url
+              ? `<a href="${event.clip_url}" target="_blank" class="video-link-btn">Xem video</a>`
+              : `Không có video`;
+
+            return `
+              <tr>
+                <td>${event.stt}</td>
+                <td>${labelHtml}</td>
+                <td>${event.confidence.toFixed(2)}</td>
+                <td>${event.timestamp}</td>
+                <td>${imageHtml}</td>
+                <td>${clipHtml}</td>
+              </tr>
+            `;
+          }).join("");
+        } catch (error) {
+          console.error("Lỗi load lịch sử:", error);
+        }
+      }
+
+      setInterval(loadEvents, 3000);
+      loadEvents();
+    function openImageOverlay(src) {
+      overlay.style.display = "flex";
+      overlayStream.src = src;
+    }
+
+    window.addEventListener("load", () => {
+      const streamImg = document.querySelector("#uploadFrame img");
+
+      if (streamImg) {
+        overlay.style.display = "flex";
+        overlayStream.src = streamImg.src;
+      }
+    });
+
+    closeOverlay.onclick = () => {
+      overlay.style.display = "none";
+    };
+
+    overlay.onclick = (e) => {
+      if (e.target.id === "videoOverlay") {
+        overlay.style.display = "none";
+      }
+    };
+
+    if (videoUpload) {
+      videoUpload.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+
+        const url = URL.createObjectURL(file);
+        uploadFrame.innerHTML = `
+          <video controls autoplay muted>
+            <source src="${url}" type="${file.type}">
+          </video>
+        `;
+      });
+    }
+
+    if (clearUpload) {
+      clearUpload.addEventListener('click', () => {
+        if (videoUpload) videoUpload.value = '';
+        uploadFrame.innerHTML = `
+          <div class="status-badge">UPLOAD VIDEO</div>
+          <div class="placeholder">Chưa có video nào được chọn</div>
+        `;
+      });
+    }
+  </script>
+</body>
+</html>
