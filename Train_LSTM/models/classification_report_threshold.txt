@@ -1,0 +1,9 @@
+              precision    recall  f1-score   support
+
+non_violence     0.8205    0.9449    0.8783      7130
+    violence     0.9099    0.8230    0.8643      3204
+      weapon     0.9548    0.7569    0.8444      3739
+
+    accuracy                         0.8672     14073
+   macro avg     0.8951    0.8416    0.8623     14073
+weighted avg     0.8765    0.8672    0.8661     14073

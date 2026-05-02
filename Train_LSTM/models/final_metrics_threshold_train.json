@@ -1,0 +1,85 @@
+{
+  "raw_train_shape": [
+    81293,
+    16,
+    32,
+    6
+  ],
+  "raw_val_shape": [
+    21203,
+    16,
+    32,
+    6
+  ],
+  "raw_test_shape": [
+    14073,
+    16,
+    32,
+    6
+  ],
+  "adapted_train_shape": [
+    81293,
+    16,
+    192
+  ],
+  "adapted_val_shape": [
+    21203,
+    16,
+    192
+  ],
+  "adapted_test_shape": [
+    14073,
+    16,
+    192
+  ],
+  "seq_len": 16,
+  "window_size": 32,
+  "frame_feature_dim": 6,
+  "input_dim": 192,
+  "num_classes": 3,
+  "class_names": [
+    "non_violence",
+    "violence",
+    "weapon"
+  ],
+  "sample_label_rule": "label of last window in SEQ_LEN windows",
+  "best_epoch": 6,
+  "best_val_score": 0.7839755459652755,
+  "best_thresholds": {
+    "score": 0.7839755459652755,
+    "macro_f1": 0.7883218542215157,
+    "acc": 0.7980474461161157,
+    "violence_th": 0.6,
+    "weapon_th": 0.65,
+    "violence_margin": 0.0,
+    "weapon_margin": 0.0,
+    "false_weapon_rate_from_non": 0.028975388374934543
+  },
+  "test_argmax": {
+    "acc": 0.8902863639593548,
+    "f1": 0.8900492775338065,
+    "precision": 0.8819977115421141,
+    "recall": 0.8998543214992129
+  },
+  "test_threshold": {
+    "acc": 0.8671924962694522,
+    "f1": 0.862334931945945,
+    "precision": 0.895071142345338,
+    "recall": 0.8416004538084921
+  },
+  "train_config": {
+    "use_weighted_sampler": true,
+    "use_class_weights": false,
+    "use_focal_loss": true,
+    "focal_gamma": 1.5,
+    "batch_size": 48,
+    "epochs_requested": 50,
+    "lr": 0.0005,
+    "weight_decay": 0.0001,
+    "hidden": 128,
+    "num_layers": 2,
+    "dropout": 0.3,
+    "bidirectional": true,
+    "patience": 10
+  }
+}

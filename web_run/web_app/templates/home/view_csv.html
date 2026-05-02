@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem file thống kê CSV</title>
+
+<style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f8fc;
+            margin: 0;
+            padding: 24px;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            padding: 24px;
+        }
+
+        h2 {
+            margin-bottom: 16px;
+            color: #0b3d91;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .back-btn {
+            display: inline-block;
+            padding: 10px 16px;
+            border-radius: 10px;
+            background: #0b3d91;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-btn:hover {
+            background: #1248aa;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+
+        th, td {
+            border: 1px solid #dbe4f0;
+            padding: 12px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        th {
+            background: #eef4ff;
+            color: #0b3d91;
+            font-weight: 700;
+        }
+
+        tr:nth-child(even) {
+            background: #fafcff;
+        }
+
+        .danger-row {
+            background: #fff59d !important;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+            margin-top: 16px;
+        }
+
+        .empty {
+            text-align: center;
+            color: #6b7280;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>Nội dung file thống kê: {{ filename }}</h2>
+            <div style="display:flex; gap:10px;">
+                <a href="{% url 'download_csv' filename %}" class="back-btn" style="background:#16a34a;">
+                    ⬇ Tải CSV
+                </a>
+
+                <a href="{% url 'home' %}" class="back-btn">
+                    ← Quay lại
+                </a>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% else %}
+            <table>
+                <thead>
+                    <tr>
+                        {% for h in headers %}
+                            <th>{{ h }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if data %}
+                        {% for row in data %}
+                            <tr class="{% if row.1 == 'violence' or row.1 == 'weapon' %}danger-row{% endif %}">
+                                {% for col in row %}
+                                    <td>{{ col }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="{{ headers|length }}" class="empty">File CSV không có dữ liệu</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+</body>
+</html>
