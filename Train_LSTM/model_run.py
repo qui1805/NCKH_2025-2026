@@ -24,11 +24,15 @@ FRAME_FEATURE_DIM = 6
 LSTM_CLASS_NAMES = ["non_violence", "violence", "weapon"]
 NUM_CLASSES = 3
 CONF_THRES = 0.75
-VIOLENCE_THRES = 0.75
-WEAPON_THRES = 0.75
+VIOLENCE_THRES = 0.55
+WEAPON_THRES = 0.7
+
+# Thời gian duy trì nhãn sau khi đã đạt ngưỡng xác suất LSTM
+VIOLENCE_HOLD_SEC = 1.2
+WEAPON_HOLD_SEC = 0.5
 
 DEBUG_YOLO_EVERY = 0
-SAVE_DIR = r"C:\Train_LSTM\output\videos"
+SAVE_DIR = r"C:\Train_LSTM\output\videos-0.6-0.7-time"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # =========================
@@ -317,6 +321,46 @@ def final_label_by_probability(prob: np.ndarray) -> int:
 
     return 0
 
+def temporal_output_filter(raw_pred: int, raw_prob: np.ndarray, fps: float, state: dict):
+    """
+    Lớp lọc thời gian sau khi LSTM đã qua ngưỡng xác suất.
+
+    raw_pred:
+        0 = non_violence
+        1 = violence
+        2 = weapon
+
+    Chỉ cho xuất nhãn:
+        violence nếu duy trì >= VIOLENCE_HOLD_SEC
+        weapon nếu duy trì >= WEAPON_HOLD_SEC
+    """
+
+    # Nếu không phải violence/weapon thì reset bộ đếm
+    if raw_pred not in [1, 2]:
+        state["current_label"] = 0
+        state["hold_frames"] = 0
+        return 0
+
+    # Nếu đổi nhãn nguy hiểm thì đếm lại từ đầu
+    if state["current_label"] != raw_pred:
+        state["current_label"] = raw_pred
+        state["hold_frames"] = 1
+    else:
+        state["hold_frames"] += 1
+
+    hold_sec = state["hold_frames"] / max(fps, 1e-8)
+
+    if raw_pred == 1:
+        if hold_sec >= VIOLENCE_HOLD_SEC:
+            return 1
+        return 0
+
+    if raw_pred == 2:
+        if hold_sec >= WEAPON_HOLD_SEC:
+            return 2
+        return 0
+
+    return 0
 
 def build_window_from_frame_buffer() -> np.ndarray:
     return np.asarray(frame_buffer, dtype=np.float32)
@@ -389,11 +433,12 @@ def update_label_counter(counter: dict, label_name: str):
 
 
 def get_final_label_from_counter(counter: dict) -> str:
-    if not counter:
+    total = sum(counter.values())
+    if total == 0:
         return "no_prediction"
+
     priority = {"weapon": 3, "violence": 2, "non_violence": 1}
     return max(counter.items(), key=lambda x: (x[1], priority.get(x[0], 0)))[0]
-
 
 def draw_lstm_info(frame, frame_id, fps_value, display_pred, display_prob, ready_sequence):
     if ready_sequence:
@@ -476,13 +521,19 @@ def run_video(source=0, save_output=True, output_name=None):
         csv_path, csv_file, csv_writer = create_eval_csv(output_path)
         print(f"[INFO] Đang ghi CSV đánh giá nhãn: {csv_path}")
 
-    frame_id = 0
-    sequence_pred = 0
+    sequence_pred = 0          # nhãn sau khi đã qua lọc thời gian để hiển thị
+    raw_sequence_pred = 0      # nhãn gốc sau lọc xác suất LSTM
     sequence_prob = None
     has_sequence_prediction = False
 
+    temporal_state = {
+        "current_label": 0,
+        "hold_frames": 0,
+    }
+
     prev_time = time.perf_counter()
     fps_display = 0.0
+    frame_id = 0
 
     print("[INFO] Nhấn ESC để thoát.")
     print("[INFO] Realtime: YOLO tạo feature 6D -> 32 frame/window -> 16 window/sample -> LSTM dự đoán.")
@@ -510,14 +561,24 @@ def run_video(source=0, save_output=True, output_name=None):
                 window_buffer.append(window)
 
             if len(window_buffer) == SEQ_LEN:
-                sequence_pred, sequence_prob = predict_lstm_sequence()
+                raw_sequence_pred, sequence_prob = predict_lstm_sequence()
                 has_sequence_prediction = True
+
+                # Lọc thêm theo thời gian duy trì nhãn
+                sequence_pred = temporal_output_filter(
+                    raw_sequence_pred,
+                    sequence_prob,
+                    fps,
+                    temporal_state
+                )
 
 
                 if csv_writer is not None and sequence_prob is not None:
                     eval_stt += 1
                     label_name = LSTM_CLASS_NAMES[sequence_pred]
                     conf = get_display_conf(sequence_pred, sequence_prob)
+
+                    raw_label_name = LSTM_CLASS_NAMES[raw_sequence_pred]
                     update_label_counter(label_counter, label_name)
 
                     csv_writer.writerow([
@@ -530,10 +591,11 @@ def run_video(source=0, save_output=True, output_name=None):
                         round(float(sequence_prob[0]), 4),
                         round(float(sequence_prob[1]), 4),
                         round(float(sequence_prob[2]), 4),
-                        LSTM_CLASS_NAMES[int(np.argmax(sequence_prob))],
+                        raw_label_name,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     ])
-
+                if csv_file is not None:    
+                    csv_file.flush()
             # Chỉ hiện box YOLO khi LSTM đã dự đoán ra violence hoặc weapon
             if has_sequence_prediction and sequence_pred in [1, 2]:
                 draw_yolo_boxes_normal(frame, results)
@@ -564,7 +626,7 @@ def run_video(source=0, save_output=True, output_name=None):
 
             csv_writer.writerow([])
             csv_writer.writerow(["SUMMARY"])
-            csv_writer.writerow(["total_frames", frame_id])
+            csv_writer.writerow(["total_frames", frame_id if "frame_id" in locals() else 0])
             csv_writer.writerow(["total_lstm_predictions", total_predictions])
             csv_writer.writerow(["final_label_by_counter", final_label])
             csv_writer.writerow(["final_label_count", final_count])
@@ -574,7 +636,7 @@ def run_video(source=0, save_output=True, output_name=None):
         if csv_file is not None:
             csv_file.close()
 
-    if output_path is not None and writer is not None:
+    if output_path is not None:
         print(f"[INFO] Đã lưu video tại: {output_path}")
     if csv_path is not None:
         print(f"[INFO] Đã lưu CSV đánh giá nhãn tại: {csv_path}")
@@ -591,9 +653,10 @@ if __name__ == "__main__":
     #run_video(source=1, save_output=True)
 
     # 2) Video file + record
-    run_video(source=r"C:\Train_LSTM\videos\violence.mp4", save_output=True,)
+    run_video(source=r"C:\Train_LSTM\video\non (12).mp4", save_output=True,)
 
     # 3) Webcam không record
     # run_video(source=0, save_output=False)
+
 
 
