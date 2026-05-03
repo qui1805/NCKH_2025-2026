@@ -26,7 +26,6 @@ FRAME_STRIDE = 1
 SEQ_LEN = 16
 SEQ_STRIDE = 1
 
-
 GROUP_COLS = ["videoID", "segment_id"]
 FRAME_ORDER_COL = "Frame_number"
 
@@ -38,20 +37,38 @@ NUM_CLASSES = 3
 CLASS_NAMES = ["non_violence", "violence", "weapon"]
 
 CONF_LABEL_THRES = 0.75
-VIOLENCE_MIN_SCORE = 28
-WEAPON_MIN_SCORE   = 22
-YOLO_BONUS_THRES   = 0.3
-YOLO_BONUS_SCORE   = 0.2
 
-if VIOLENCE_MIN_SCORE > WINDOW_SIZE:
-    raise ValueError(f"VIOLENCE_MIN_RUN={VIOLENCE_MIN_SCORE} không được lớn hơn WINDOW_SIZE={WINDOW_SIZE}")
-if WEAPON_MIN_SCORE > WINDOW_SIZE:
-    raise ValueError(f"WEAPON_MIN_RUN={WEAPON_MIN_SCORE} không được lớn hơn WINDOW_SIZE={WINDOW_SIZE}")
+
 
 CLASS_WEIGHT_BETA = 0.999
 CLASS_WEIGHT_CLIP_MIN = 0.25
 CLASS_WEIGHT_CLIP_MAX = 4.00
 
+def filter_feature_like_realtime(onehot_vec, conf_vec):
+    onehot_vec = np.asarray(onehot_vec, dtype=np.float32)
+    conf_vec = np.asarray(conf_vec, dtype=np.float32)
+
+    if len(onehot_vec) != NUM_CLASSES or len(conf_vec) != NUM_CLASSES:
+        return None
+
+    # lấy class YOLO có conf cao nhất
+    cls_id = int(np.argmax(conf_vec))
+    conf = float(conf_vec[cls_id])
+
+    # nếu YOLO không đủ ngưỡng thì coi frame là non_violence
+    if conf < CONF_LABEL_THRES:
+        onehot = np.array([1, 0, 0], dtype=np.float32)
+        confs = np.array([1, 0, 0], dtype=np.float32)
+        return np.concatenate([onehot, confs]).astype(np.float32)
+
+    # nếu đủ ngưỡng thì giữ lại nhãn và confidence
+    onehot = np.zeros(NUM_CLASSES, dtype=np.float32)
+    confs = np.zeros(NUM_CLASSES, dtype=np.float32)
+
+    onehot[cls_id] = 1.0
+    confs[cls_id] = conf
+
+    return np.concatenate([onehot, confs]).astype(np.float32)
 def max_consecutive_true(mask):
     best = 0
     cur = 0
@@ -91,34 +108,12 @@ def decide_window_label_from_gt_and_conf(
     frame_gt_labels: List[int],
     frame_conf_scores: List[np.ndarray],
 ) -> int:
-    violence_score = 0.0
-    weapon_score = 0.0
+    labels = np.asarray(frame_gt_labels, dtype=np.int64)
+    counts = np.bincount(labels, minlength=NUM_CLASSES)
 
-    for gt, conf_vec in zip(frame_gt_labels, frame_conf_scores):
-        gt = int(gt)
-        conf_vec = np.asarray(conf_vec, dtype=np.float32)
-
-        if len(conf_vec) != NUM_CLASSES:
-            continue
-
-        # check_video là nhãn thật, nên được tính chính
-        if gt == 1:
-            violence_score += 1.0
-
-            # YOLO đúng thì cộng thêm điểm phụ
-            if float(conf_vec[1]) >= YOLO_BONUS_THRES:
-                violence_score += YOLO_BONUS_SCORE
-
-        elif gt == 2:
-            weapon_score += 1.0
-
-            if float(conf_vec[2]) >= YOLO_BONUS_THRES:
-                weapon_score += YOLO_BONUS_SCORE
-
-    # Ưu tiên weapon nếu đủ điểm
-    if weapon_score >= WEAPON_MIN_SCORE:
+    if counts[2] >= 8:
         return 2
-    if violence_score >= VIOLENCE_MIN_SCORE:
+    if counts[1] >= 8:
         return 1
     return 0
 
@@ -240,9 +235,14 @@ def process_csv_to_lstm_data(
         raise ValueError(f"{file_path}: không còn dòng hợp lệ sau khi parse dữ liệu.")
 
     df["feature_vec"] = df.apply(
-        lambda row: np.concatenate([row["yolo_onehot_vec"], row["conf_score_vec"]]).astype(np.float32),
-        axis=1,
-    )
+    lambda row: filter_feature_like_realtime(
+        row["yolo_onehot_vec"],
+        row["conf_score_vec"]
+    ),
+    axis=1,
+)
+
+    df = df[df["feature_vec"].notna()].reset_index(drop=True)
 
     X_all, y_all = [], []
     usable_groups, total_windows, total_sequences = 0, 0, 0
@@ -366,7 +366,7 @@ def create_and_save_lstm_data(train_path: str, val_path: str, test_path: str, sa
     np.save(os.path.join(save_dir, "sample_weights.npy"), sample_weights)
 
     metadata = {
-        "feature_definition": "[onehot_yolo(3) + conf_score_yolo(3)]",
+        "feature_definition": "[filtered_onehot_yolo(3) + filtered_conf_score_yolo(3)]",
         "feature_dim": 6,
         "ground_truth_source": GT_LABEL_COL,
         "group_cols": GROUP_COLS,
@@ -374,15 +374,14 @@ def create_and_save_lstm_data(train_path: str, val_path: str, test_path: str, sa
         "frame_stride": FRAME_STRIDE,
         "seq_len": SEQ_LEN,
         "seq_stride": SEQ_STRIDE,
-        "conf_label_threshold": CONF_LABEL_THRES,
-        "yolo_bonus_threshold": YOLO_BONUS_THRES,
-        "yolo_bonus_score": YOLO_BONUS_SCORE,
         "window_label_rule": {
-            "weapon": f"GT score: check_video=2 gives 1.0 point, YOLO conf_weapon >= {YOLO_BONUS_THRES} gives +{YOLO_BONUS_SCORE}; total must be >= {WEAPON_MIN_SCORE}",
-            "violence": f"GT score: check_video=1 gives 1.0 point, YOLO conf_violence >= {YOLO_BONUS_THRES} gives +{YOLO_BONUS_SCORE}; total must be >= {VIOLENCE_MIN_SCORE}",
-            "priority": ["weapon", "violence", "non_violence"],
-        },
-        "sample_label_rule": "label of last window in SEQ_LEN windows",
+        "weapon": "Window is labeled as weapon if at least 8/32 frames have ground-truth label weapon",
+        "violence": "Window is labeled as violence if at least 8/32 frames have ground-truth label violence",
+        "non_violence": "Window is labeled as non_violence if neither weapon nor violence reaches the required frame count",
+        "priority": ["weapon", "violence", "non_violence"],
+    },
+    "sample_label_rule": "label of last window in SEQ_LEN windows",
+    "feature_filter_rule": f"YOLO feature is filtered like realtime: if max YOLO confidence < {CONF_LABEL_THRES}, frame feature is set to non_violence",
         "class_names": CLASS_NAMES,
         "train_info": info_train,
         "val_info": info_val,

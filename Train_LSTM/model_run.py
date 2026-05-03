@@ -24,8 +24,8 @@ FRAME_FEATURE_DIM = 6
 LSTM_CLASS_NAMES = ["non_violence", "violence", "weapon"]
 NUM_CLASSES = 3
 CONF_THRES = 0.75
-VIOLENCE_THRES = 0.8
-WEAPON_THRES = 0.7
+VIOLENCE_THRES = 0.75
+WEAPON_THRES = 0.75
 
 DEBUG_YOLO_EVERY = 0
 SAVE_DIR = r"C:\Train_LSTM\output\videos"
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     #run_video(source=1, save_output=True)
 
     # 2) Video file + record
-    run_video(source=r"C:\Train_LSTM\videos\non.avi", save_output=True,)
+    run_video(source=r"C:\Train_LSTM\videos\violence.mp4", save_output=True,)
 
     # 3) Webcam không record
     # run_video(source=0, save_output=False)
