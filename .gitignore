@@ -1,10 +1,17 @@
-*.npy
+# Model
 *.pt
 *.pth
-*.mp4
-*.avi
-__pycache__/
-*.pyc
-db.sqlite3
-media/
+
+# Data
+videos/
+inputs/
 output/
+web_run/web_app/media/
+
+# Video
+*.mp4
+
+# Results
+*.csv
+*.png
+*.json
